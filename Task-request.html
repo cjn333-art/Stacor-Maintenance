@@ -146,6 +146,7 @@
         <label for="department">Department</label>
         <select id="department" required>
           <option value="" disabled selected>Choose department</option>
+          <option>Compliance</option>
           <option>Construction Chemicals</option>
           <option>General / Workshop</option>
           <option>Loading Bay</option>
@@ -160,15 +161,9 @@
         </select>
       </div>
 
-      <div class="field">
+      <div class="field" id="type-field" style="display:none;">
         <label>What needs attention</label>
-        <div class="type-grid" id="type-grid">
-          <label class="type-opt" data-value="Tank"><input type="radio" name="type" value="Tank">Tank</label>
-          <label class="type-opt" data-value="Motor"><input type="radio" name="type" value="Motor">Motor</label>
-          <label class="type-opt" data-value="Electrical"><input type="radio" name="type" value="Electrical">Electrical</label>
-          <label class="type-opt" data-value="Pipe/Valve"><input type="radio" name="type" value="Pipe/Valve">Pipe/Valve</label>
-          <label class="type-opt" data-value="Other"><input type="radio" name="type" value="Other">Other</label>
-        </div>
+        <div class="type-grid" id="type-grid"></div>
       </div>
 
       <div class="field">
@@ -270,16 +265,56 @@ document.getElementById('photo-remove').addEventListener('click', () => {
   photoBtnWrap.classList.remove('has-file');
 });
 
-document.querySelectorAll('#type-grid .type-opt').forEach(opt => {
-  opt.addEventListener('click', () => {
-    selectedType = opt.dataset.value;
-    document.querySelectorAll('#type-grid .type-opt').forEach(o => o.classList.remove('selected'));
-    opt.classList.add('selected');
-    opt.querySelector('input').checked = true;
+// Department-specific options for "What needs attention"
+const GENERAL_OPTS = ['Electrical', 'Infrastructure', 'Motor', 'Pipe/Valve', 'Steam Lines', 'Tank'];
+const DEPT_OPTIONS = {
+  'Wax': [...['Chiller', 'Rebagging', 'Slabber', 'Wax Rings'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'Petroleum Jelly': [...['Column A', 'Column B', 'Column C', 'Dump Tank', 'Loading Point', 'Vacuum (Inside)', 'Vacuum (Outside)'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'White Oil': [...['Production Area', 'Storage Area'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'Lubricants 1': [...['Barcoder', 'Blending', 'Decanting', 'Induction Heat Sealer', 'Labelling', 'Shrink Wrap'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'Lubricants 2': [...['Brake Fluid', 'Decanting', 'Induction Heat Sealer', 'MEG', 'Shrink Wrap'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'Construction Chemicals': [...['Boiler', 'Chain Lube', 'Cooking Tanks', 'Material Storage', 'Processing Columns'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'MWF': [...['Unit 7'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'Loading Bay': [...['Lubes Loading Bay', 'ST1 Top Bay', 'ST2 Bottom Bay', 'ST2 Top Bay', 'White Oil Line'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'Stacor 2 A Block': [...['Boiler', 'Compressor', 'ISO Heating Point', 'PJ Finished Product Storage', 'Tank 1', 'Tank 2', 'Tank 3', 'Tank 4', 'Weighbridge', 'White Oil Product Storage'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'Stacor 2 B Block': [...['B1', 'B2', 'B3', 'Water Treatment System'], ...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'General / Workshop': [...GENERAL_OPTS, 'Other'].sort((a,b) => a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b)),
+  'Compliance': ['Construction Chemicals', 'Electrical', 'General / Workshop', 'Lab', 'Loading Bay', 'Lubricants 1', 'Lubricants 2', 'MWF', 'Petroleum Jelly', 'Stacor 2 A Block', 'Stacor 2 B Block', 'Tank Farm 1', 'Tank Farm 2', 'Tank Farm 3', 'Tank Farm 4', 'Tank Farm 5', 'Tank Farm 6', 'Tank Farm 7', 'Tank Farm 8', 'Tank Farm 9', 'Wax', 'White Oil', 'Other']
+};
 
-    document.getElementById('tank-field').classList.toggle('show', selectedType === 'Tank');
-    document.getElementById('other-field').classList.toggle('show', selectedType === 'Other');
+function buildTypeGrid(dept) {
+  const grid = document.getElementById('type-grid');
+  const field = document.getElementById('type-field');
+  const options = DEPT_OPTIONS[dept];
+  if (!options) { field.style.display = 'none'; return; }
+
+  grid.innerHTML = options.map(v =>
+    `<label class="type-opt" data-value="${v}"><input type="radio" name="type" value="${v}">${v}</label>`
+  ).join('');
+
+  field.style.display = 'block';
+  selectedType = null;
+
+  grid.querySelectorAll('.type-opt').forEach(opt => {
+    opt.addEventListener('click', () => {
+      selectedType = opt.dataset.value;
+      grid.querySelectorAll('.type-opt').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+      opt.querySelector('input').checked = true;
+
+      document.getElementById('tank-field').classList.toggle('show', selectedType === 'Tank');
+      document.getElementById('other-field').classList.toggle('show', selectedType === 'Other');
+    });
   });
+}
+
+document.getElementById('department').addEventListener('change', (e) => {
+  selectedType = null;
+  selectedTankEmpty = null;
+  document.querySelectorAll('.yn-opt').forEach(o => o.classList.remove('selected'));
+  document.getElementById('tank-field').classList.remove('show');
+  document.getElementById('other-field').classList.remove('show');
+  buildTypeGrid(e.target.value);
 });
 
 document.querySelectorAll('#tank-empty-row .yn-opt').forEach(opt => {
@@ -376,6 +411,8 @@ document.getElementById('req-form').addEventListener('submit', async (e) => {
   photoLabel.textContent = 'Tap to add a photo';
   photoBtnWrap.classList.remove('has-file');
   document.querySelectorAll('.type-opt, .yn-opt').forEach(o => o.classList.remove('selected'));
+  document.getElementById('type-field').style.display = 'none';
+  document.getElementById('type-grid').innerHTML = '';
   document.getElementById('tank-field').classList.remove('show');
   document.getElementById('other-field').classList.remove('show');
   document.getElementById('urgent-toggle').classList.remove('on');
