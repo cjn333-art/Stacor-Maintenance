@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stacor Maintenance</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1B1E20;
+    --panel: #24282B;
+    --line: #383E42;
+    --text: #EDEEF0;
+    --text-dim: #9AA1A6;
+    --steel: #5B8FAE;
+    --steel-dim: #24404F;
+    --amber: #F0A202;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif; font-size: 15px;
+  }
+  h1 { font-family: 'Barlow Condensed', sans-serif; }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 48px 16px; }
+  h1 { font-size: 28px; font-weight: 700; margin: 0 0 6px; letter-spacing: 0.2px; }
+  .sub { color: var(--text-dim); font-size: 13px; margin-bottom: 28px; }
+  .card {
+    display: block; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 18px 16px; margin-bottom: 12px;
+    text-decoration: none; color: var(--text); transition: border-color 0.15s;
+  }
+  .card:hover, .card:active { border-color: var(--steel); }
+  .card-title {
+    font-family: 'Barlow Condensed', sans-serif; font-size: 19px;
+    font-weight: 600; margin-bottom: 3px;
+  }
+  .card-desc { font-size: 13px; color: var(--text-dim); }
+  .icon { margin-right: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stacor Maintenance</h1>
+  <div class="sub">Select an app</div>
+
+  <a class="card" href="Task-request.html">
+    <div class="card-title"><span class="icon">📋</span>Request a Task</div>
+    <div class="card-desc">Submit a maintenance request to the queue</div>
+  </a>
+
+  <a class="card" href="maintenance-time-log.html">
+    <div class="card-title"><span class="icon">⏱️</span>Maintenance Time Log</div>
+    <div class="card-desc">Log and track maintenance jobs</div>
+  </a>
+</div>
+</body>
+</html>
