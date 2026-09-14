@@ -34,8 +34,9 @@
     position: sticky; top: 0; z-index: 20; background: var(--bg);
     border-bottom: 1px solid var(--line); padding: 16px 16px 12px;
   }
-  header h1 { font-size: 26px; font-weight: 700; margin: 0; letter-spacing: 0.2px; }
-  header .sub { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
+  header h1 { font-size: 26px; font-weight: 700; margin: 0; letter-spacing: 0.2px; text-align: center; }
+  header .sub { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; text-align: center; }
+  header .brand { font-size: 15px; font-weight: 600; color: var(--amber); text-align: center; margin-bottom: 6px; letter-spacing: 0.3px; }
 
   #panel { margin: 14px 16px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
   #req-form { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
@@ -106,6 +107,7 @@
 <body>
 <div id="app">
   <header>
+    <div class="brand">Make A Plan Dept (aka Maintenance)</div>
     <h1>Request a Task</h1>
     <div class="sub">Send a task to Stacor Maintenance</div>
   </header>
