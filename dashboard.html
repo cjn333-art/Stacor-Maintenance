@@ -95,6 +95,16 @@
   .di-badge.pending { background: rgba(240,162,2,0.15); color: var(--amber); }
   .drawer-empty { padding: 16px 14px; color: var(--text-dim); font-size: 13px; font-style: italic; }
 
+  .drawer-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--line);
+  }
+  .drawer-tab {
+    flex: 1; text-align: center; padding: 9px 8px; font-size: 13px; font-weight: 600;
+    color: var(--text-dim); cursor: pointer; background: none; border: none;
+    border-bottom: 2px solid transparent; font-family: 'Inter', sans-serif;
+  }
+  .drawer-tab.active { color: var(--steel); border-bottom-color: var(--steel); }
+
   .section { margin: 18px 16px 0; }
   .section h2 { font-size: 18px; font-weight: 600; margin: 0 0 10px; }
 
@@ -186,6 +196,7 @@
         <div class="drawer-title" id="drawer-title"></div>
         <button class="drawer-close" id="drawer-close">&times;</button>
       </div>
+      <div class="drawer-tabs" id="drawer-tabs" style="display:none;"></div>
       <div class="drawer-list" id="drawer-list"></div>
     </div>
 
@@ -288,12 +299,80 @@ function fmtDateTime(iso) {
 
 function renderDrawer(title, items) {
   document.getElementById('drawer-title').textContent = title;
+  document.getElementById('drawer-tabs').style.display = 'none';
+  document.getElementById('drawer-tabs').innerHTML = '';
   const list = document.getElementById('drawer-list');
   if (!items.length) {
     list.innerHTML = '<div class="drawer-empty">No items to show.</div>';
   } else {
     list.innerHTML = items.map(i => i).join('');
   }
+  document.getElementById('detail-drawer').classList.add('open');
+  document.getElementById('detail-drawer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+let hoursSubView = 'person';
+
+function showHoursView(entries) {
+  const title = 'Man-Hours';
+  document.getElementById('drawer-title').textContent = title;
+
+  // Render tabs
+  const tabsEl = document.getElementById('drawer-tabs');
+  tabsEl.style.display = 'flex';
+  tabsEl.innerHTML = `
+    <button class="drawer-tab ${hoursSubView === 'person' ? 'active' : ''}" data-hours-tab="person">By Person</button>
+    <button class="drawer-tab ${hoursSubView === 'task' ? 'active' : ''}" data-hours-tab="task">By Task</button>
+  `;
+  tabsEl.querySelectorAll('.drawer-tab').forEach(tab => {
+    tab.onclick = () => {
+      hoursSubView = tab.dataset.hoursTab;
+      showHoursView(entries);
+    };
+  });
+
+  const list = document.getElementById('drawer-list');
+
+  if (hoursSubView === 'person') {
+    const crewHours = {};
+    entries.forEach(e => {
+      (e.crew || []).forEach(name => {
+        if (!crewHours[name]) crewHours[name] = { hours: 0, jobs: 0 };
+        crewHours[name].hours += (e.manHours || 0) / (e.crew.length || 1);
+        crewHours[name].jobs++;
+      });
+    });
+    const sorted = Object.entries(crewHours).sort((a, b) => b[1].hours - a[1].hours);
+    if (!sorted.length) {
+      list.innerHTML = '<div class="drawer-empty">No crew data.</div>';
+    } else {
+      list.innerHTML = sorted.map(([name, s]) => `
+        <div class="drawer-item">
+          <div class="di-main">
+            <div class="di-desc">${esc(name)}</div>
+            <div class="di-meta">${s.jobs} job${s.jobs !== 1 ? 's' : ''}</div>
+          </div>
+          <div class="di-badge open">${s.hours.toFixed(1)}h</div>
+        </div>
+      `).join('');
+    }
+  } else {
+    const withHours = entries.filter(e => e.manHours > 0).sort((a, b) => b.manHours - a.manHours);
+    if (!withHours.length) {
+      list.innerHTML = '<div class="drawer-empty">No hours recorded.</div>';
+    } else {
+      list.innerHTML = withHours.map(e => `
+        <div class="drawer-item">
+          <div class="di-main">
+            <div class="di-desc">${esc(e.description)}</div>
+            <div class="di-meta">${esc(e.department)} · ${(e.crew||[]).join(', ')} · ${fmtDate(e.blocks?.[0]?.start)}</div>
+          </div>
+          <div class="di-badge open">${e.manHours}h</div>
+        </div>
+      `).join('');
+    }
+  }
+
   document.getElementById('detail-drawer').classList.add('open');
   document.getElementById('detail-drawer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -335,16 +414,9 @@ function showView(view) {
       </div>
     `));
   } else if (view === 'hours') {
-    const withHours = entries.filter(e => e.manHours > 0).sort((a,b) => b.manHours - a.manHours);
-    renderDrawer('Jobs by Man-Hours', withHours.map(e => `
-      <div class="drawer-item">
-        <div class="di-main">
-          <div class="di-desc">${esc(e.description)}</div>
-          <div class="di-meta">${esc(e.department)} · ${(e.crew||[]).join(', ')} · ${fmtDate(e.blocks?.[0]?.start)}</div>
-        </div>
-        <div class="di-badge open">${e.manHours}h</div>
-      </div>
-    `));
+    hoursSubView = hoursSubView || 'person';
+    showHoursView(entries);
+    return;
   } else if (view === 'pending') {
     const sorted = pending.slice().sort((a,b) => {
       if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
