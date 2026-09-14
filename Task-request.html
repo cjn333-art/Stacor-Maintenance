@@ -96,6 +96,23 @@
   }
   .submit-btn:active { opacity: 0.85; }
 
+  .photo-upload-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--panel-raised); border: 1px dashed var(--line); border-radius: 5px;
+    padding: 14px; cursor: pointer; color: var(--text-dim); font-size: 14px; font-weight: 500;
+    transition: border-color 0.15s;
+  }
+  .photo-upload-btn:hover, .photo-upload-btn.has-file { border-color: var(--steel); color: var(--text); }
+  .photo-upload-btn input { display: none; }
+  .photo-preview-wrap { position: relative; margin-top: 8px; }
+  .photo-preview-wrap img { max-width: 100%; max-height: 160px; border-radius: 4px; }
+  .photo-remove {
+    position: absolute; top: 4px; right: 4px; background: rgba(0,0,0,0.7); border: none;
+    color: #fff; width: 24px; height: 24px; border-radius: 50%; font-size: 14px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .photo-uploading-msg { font-size: 12px; color: var(--amber); text-align: center; margin-top: 4px; }
+
   #confirm-toast {
     display: none; margin: 12px 16px 0; background: var(--green-dim); border: 1px solid var(--green);
     color: var(--green); border-radius: 5px; padding: 10px 13px; font-size: 13.5px; font-weight: 500;
@@ -168,6 +185,19 @@
         <input type="text" id="other-detail" placeholder="What needs attention">
       </div>
 
+      <div class="field">
+        <label>Photo (optional)</label>
+        <label class="photo-upload-btn" id="photo-upload-btn">
+          <input type="file" id="task-photo" accept="image/*" capture="environment">
+          <span>📷</span> <span id="photo-label">Tap to add a photo</span>
+        </label>
+        <div class="photo-preview-wrap" id="photo-preview-wrap" style="display:none;">
+          <img id="photo-preview">
+          <button type="button" class="photo-remove" id="photo-remove">&times;</button>
+        </div>
+        <div class="photo-uploading-msg" id="photo-uploading" style="display:none;">Uploading photo…</div>
+      </div>
+
       <label class="urgent-toggle" id="urgent-toggle">
         <input type="checkbox" id="urgent-check">
         <span class="switch"></span>
@@ -204,6 +234,36 @@ async function apiPost(payload) {
 
 let selectedType = null;
 let selectedTankEmpty = null;
+let photoDataUrl = null;
+
+// Photo handling
+const taskPhotoInput = document.getElementById('task-photo');
+const photoPreviewWrap = document.getElementById('photo-preview-wrap');
+const photoPreviewImg = document.getElementById('photo-preview');
+const photoLabel = document.getElementById('photo-label');
+const photoBtnWrap = document.getElementById('photo-upload-btn');
+
+taskPhotoInput.addEventListener('change', () => {
+  const file = taskPhotoInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    photoDataUrl = ev.target.result;
+    photoPreviewImg.src = photoDataUrl;
+    photoPreviewWrap.style.display = 'block';
+    photoLabel.textContent = file.name;
+    photoBtnWrap.classList.add('has-file');
+  };
+  reader.readAsDataURL(file);
+});
+
+document.getElementById('photo-remove').addEventListener('click', () => {
+  photoDataUrl = null;
+  taskPhotoInput.value = '';
+  photoPreviewWrap.style.display = 'none';
+  photoLabel.textContent = 'Tap to add a photo';
+  photoBtnWrap.classList.remove('has-file');
+});
 
 document.querySelectorAll('#type-grid .type-opt').forEach(opt => {
   opt.addEventListener('click', () => {
@@ -261,12 +321,30 @@ document.getElementById('req-form').addEventListener('submit', async (e) => {
     otherDetail: selectedType === 'Other' ? otherDetail : null,
     description: document.getElementById('description').value.trim(),
     urgent: document.getElementById('urgent-check').checked,
-    createdAt: new Date().toISOString()
+    createdAt: new Date().toISOString(),
+    photoUrl: null
   };
 
   const submitBtn = e.target.querySelector('.submit-btn');
   submitBtn.disabled = true;
   submitBtn.textContent = 'Sending...';
+
+  // Upload photo if present
+  if (photoDataUrl) {
+    document.getElementById('photo-uploading').style.display = 'block';
+    try {
+      const photoRes = await apiPost({
+        action: 'uploadPhoto',
+        entryId: task.id,
+        fileName: taskPhotoInput.files[0]?.name || 'photo.jpg',
+        dataUrl: photoDataUrl
+      });
+      if (photoRes.success && photoRes.url) task.photoUrl = photoRes.url;
+    } catch (err) {
+      console.error('Photo upload failed', err);
+    }
+    document.getElementById('photo-uploading').style.display = 'none';
+  }
 
   try {
     await apiPost({ action: 'addPending', task });
@@ -288,6 +366,10 @@ document.getElementById('req-form').addEventListener('submit', async (e) => {
   e.target.reset();
   selectedType = null;
   selectedTankEmpty = null;
+  photoDataUrl = null;
+  photoPreviewWrap.style.display = 'none';
+  photoLabel.textContent = 'Tap to add a photo';
+  photoBtnWrap.classList.remove('has-file');
   document.querySelectorAll('.type-opt, .yn-opt').forEach(o => o.classList.remove('selected'));
   document.getElementById('tank-field').classList.remove('show');
   document.getElementById('other-field').classList.remove('show');
