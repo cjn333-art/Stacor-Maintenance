@@ -124,6 +124,29 @@
   .crew-table th:not(:first-child) { text-align: right; }
   .crew-table td { padding: 8px; font-size: 14px; border-bottom: 1px solid var(--line); }
   .crew-table td:not(:first-child) { text-align: right; font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 600; }
+  .crew-table tr[data-crew] { cursor: pointer; }
+  .crew-table tr[data-crew]:hover td { color: var(--steel); }
+  .crew-table tr[data-crew].selected td:first-child { color: var(--steel); }
+
+  .crew-detail {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    margin-top: 10px; overflow: hidden; display: none;
+  }
+  .crew-detail.open { display: block; }
+  .crew-detail-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+  }
+  .crew-detail-title { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 600; }
+  .crew-detail-close { background: none; border: none; color: var(--text-dim); font-size: 18px; cursor: pointer; padding: 0 4px; }
+  .crew-detail-tabs { display: flex; border-bottom: 1px solid var(--line); }
+  .crew-detail-tab {
+    flex: 1; text-align: center; padding: 8px; font-size: 12.5px; font-weight: 600;
+    color: var(--text-dim); cursor: pointer; background: none; border: none;
+    border-bottom: 2px solid transparent; font-family: 'Inter', sans-serif;
+  }
+  .crew-detail-tab.active { color: var(--steel); border-bottom-color: var(--steel); }
+  .crew-detail-list { max-height: 300px; overflow-y: auto; }
 
   .response-list { display: flex; flex-direction: column; gap: 6px; }
   .response-row {
@@ -211,6 +234,14 @@
         <thead><tr><th>Name</th><th>Jobs</th><th>Hours</th></tr></thead>
         <tbody id="crew-body"></tbody>
       </table>
+      <div class="crew-detail" id="crew-detail">
+        <div class="crew-detail-head">
+          <div class="crew-detail-title" id="crew-detail-title"></div>
+          <button class="crew-detail-close" id="crew-detail-close">&times;</button>
+        </div>
+        <div class="crew-detail-tabs" id="crew-detail-tabs"></div>
+        <div class="crew-detail-list" id="crew-detail-list"></div>
+      </div>
     </div>
 
     <div class="section">
@@ -448,6 +479,64 @@ document.querySelectorAll('.kpi[data-view]').forEach(card => {
 });
 document.getElementById('drawer-close').addEventListener('click', closeDrawer);
 
+let activeCrewName = null;
+let crewDetailTab = 'current';
+
+function showCrewDetail(name, entries) {
+  activeCrewName = name;
+  const personEntries = entries.filter(e => (e.crew || []).includes(name));
+  const current = personEntries.filter(e => !e.completed);
+  const completed = personEntries.filter(e => e.completed);
+
+  document.getElementById('crew-detail-title').textContent = name;
+
+  // Highlight row
+  document.querySelectorAll('#crew-body tr').forEach(r => r.classList.remove('selected'));
+  const activeRow = document.querySelector(`#crew-body tr[data-crew="${CSS.escape(name)}"]`);
+  if (activeRow) activeRow.classList.add('selected');
+
+  // Tabs
+  const tabsEl = document.getElementById('crew-detail-tabs');
+  tabsEl.innerHTML = `
+    <button class="crew-detail-tab ${crewDetailTab === 'current' ? 'active' : ''}" data-tab="current">Current (${current.length})</button>
+    <button class="crew-detail-tab ${crewDetailTab === 'completed' ? 'active' : ''}" data-tab="completed">Completed (${completed.length})</button>
+  `;
+  tabsEl.querySelectorAll('.crew-detail-tab').forEach(tab => {
+    tab.onclick = () => {
+      crewDetailTab = tab.dataset.tab;
+      showCrewDetail(name, entries);
+    };
+  });
+
+  const list = document.getElementById('crew-detail-list');
+  const items = crewDetailTab === 'current' ? current : completed;
+
+  if (!items.length) {
+    list.innerHTML = `<div class="drawer-empty">No ${crewDetailTab} tasks.</div>`;
+  } else {
+    list.innerHTML = items.map(e => `
+      <div class="drawer-item">
+        <div class="di-main">
+          <div class="di-desc">${esc(e.description)}</div>
+          <div class="di-meta">${esc(e.department)} · ${fmtDate(e.blocks?.[0]?.start)}${e.manHours ? ' · ' + e.manHours + 'h' : ''}</div>
+        </div>
+        <div class="di-badge ${e.completed ? 'done' : 'open'}">${e.completed ? 'Done' : 'Open'}</div>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('crew-detail').classList.add('open');
+}
+
+function closeCrewDetail() {
+  document.getElementById('crew-detail').classList.remove('open');
+  document.querySelectorAll('#crew-body tr').forEach(r => r.classList.remove('selected'));
+  activeCrewName = null;
+  crewDetailTab = 'current';
+}
+
+document.getElementById('crew-detail-close').addEventListener('click', closeCrewDetail);
+
 function refresh() {
   const entries = getFilteredEntries();
   const pending = getFilteredPending();
@@ -494,9 +583,16 @@ function refresh() {
     crewBody.innerHTML = '<tr><td colspan="3" class="empty-note">No crew data.</td></tr>';
   } else {
     crewBody.innerHTML = crewSorted.map(([name, s]) =>
-      `<tr><td>${name}</td><td>${s.jobs}</td><td>${s.hours.toFixed(1)}</td></tr>`
+      `<tr data-crew="${esc(name)}"><td>${esc(name)}</td><td>${s.jobs}</td><td>${s.hours.toFixed(1)}</td></tr>`
     ).join('');
+
+    crewBody.querySelectorAll('tr[data-crew]').forEach(row => {
+      row.onclick = () => showCrewDetail(row.dataset.crew, entries);
+    });
   }
+
+  // If crew detail is open, refresh it
+  if (activeCrewName) showCrewDetail(activeCrewName, entries);
 
   // Response time
   const responseTimes = {};
@@ -539,8 +635,8 @@ function fmtDuration(hours) {
   return (hours / 24).toFixed(1) + ' days';
 }
 
-document.getElementById('filter-period').addEventListener('change', () => { closeDrawer(); refresh(); });
-document.getElementById('filter-dept').addEventListener('change', () => { closeDrawer(); refresh(); });
+document.getElementById('filter-period').addEventListener('change', () => { closeDrawer(); closeCrewDetail(); refresh(); });
+document.getElementById('filter-dept').addEventListener('change', () => { closeDrawer(); closeCrewDetail(); refresh(); });
 
 loadData();
 </script>
