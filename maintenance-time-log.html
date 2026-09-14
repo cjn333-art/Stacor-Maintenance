@@ -82,6 +82,14 @@
   }
   .pending-type { font-size: 15px; font-weight: 600; margin: 4px 0 2px; }
   .pending-detail { font-size: 13.5px; color: var(--text-dim); margin-bottom: 4px; }
+
+  .tank-badge {
+    display: inline-block; font-size: 12px; font-weight: 700; border-radius: 4px;
+    padding: 4px 10px; margin: 4px 0;
+  }
+  .tank-badge.empty-yes { background: var(--green-dim); color: var(--green); border: 1px solid var(--green); }
+  .tank-badge.empty-no { background: var(--red-dim); color: var(--red); border: 1px solid var(--red); }
+  .entry-tank-badge { margin: 6px 0; }
   .pending-desc { font-size: 13.5px; margin-bottom: 8px; }
   .pending-footer { display: flex; justify-content: space-between; align-items: center; }
   .pending-time { font-size: 11.5px; color: var(--text-dim); }
@@ -533,14 +541,19 @@ function renderPending() {
     const card = document.createElement('div');
     card.className = 'pending-card' + (t.urgent ? ' urgent' : '');
     let detail = '';
-    if (t.type === 'Tank' && t.tankEmpty) detail = `Tank empty: ${t.tankEmpty}`;
     if (t.type === 'Other' && t.otherDetail) detail = t.otherDetail;
+    let tankBadge = '';
+    if (t.type === 'Tank' && t.tankEmpty) {
+      const yes = t.tankEmpty === 'Yes';
+      tankBadge = `<div class="tank-badge ${yes ? 'empty-yes' : 'empty-no'}">${yes ? '✓ TANK IS EMPTY' : '✗ TANK NOT EMPTY — CONTAINS PRODUCT'}</div>`;
+    }
     card.innerHTML = `
       <div class="pending-top">
         <div class="pending-dept">${t.department}</div>
         ${t.urgent ? '<span class="urgent-badge">Urgent</span>' : ''}
       </div>
       <div class="pending-type">${t.type}</div>
+      ${tankBadge}
       ${detail ? `<div class="pending-detail">${detail}</div>` : ''}
       ${t.description ? `<div class="pending-desc">${t.description}</div>` : ''}
       <div class="pending-footer">
@@ -559,8 +572,10 @@ function renderPending() {
 
       document.getElementById('department').value = task.department;
       let desc = task.type;
-      if (task.type === 'Tank' && task.tankEmpty) desc += ` — empty: ${task.tankEmpty}`;
       if (task.type === 'Other' && task.otherDetail) desc += ` — ${task.otherDetail}`;
+      if (task.type === 'Tank' && task.tankEmpty) {
+        desc += task.tankEmpty === 'Yes' ? ' [TANK EMPTY]' : ' [TANK NOT EMPTY — CONTAINS PRODUCT]';
+      }
       if (task.description) desc += `. ${task.description}`;
       document.getElementById('description').value = desc;
 
@@ -679,12 +694,21 @@ function render() {
         </div>`;
     }).join('');
 
+    // Detect tank empty status from description
+    let entryTankBadge = '';
+    if (e.description && e.description.includes('[TANK EMPTY]')) {
+      entryTankBadge = '<div class="entry-tank-badge"><span class="tank-badge empty-yes">✓ TANK IS EMPTY</span></div>';
+    } else if (e.description && e.description.includes('[TANK NOT EMPTY')) {
+      entryTankBadge = '<div class="entry-tank-badge"><span class="tank-badge empty-no">✗ TANK NOT EMPTY — CONTAINS PRODUCT</span></div>';
+    }
+
     card.innerHTML = `
       <div class="entry-top">
         <div class="entry-dept">${e.department}</div>
         <span class="status-pill ${e.completed ? 'done' : 'active'}">${e.completed ? 'Completed' : 'In progress'}</span>
       </div>
       <div class="entry-desc">${e.description}</div>
+      ${entryTankBadge}
       ${e.crew.length ? `<div class="entry-crew">${e.crew.join(', ')}</div>` : ''}
       <div class="block-list">${blockRows}</div>
       <div class="entry-total">Total time <span class="num">${totalMs > 0 ? fmtDuration(totalMs) : '—'}</span></div>
