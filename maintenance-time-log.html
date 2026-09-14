@@ -264,6 +264,52 @@
   .complete-btn.mark-done { border-color: var(--green); color: var(--green); }
   .complete-btn.reopen { border-color: var(--text-dim); }
 
+  /* Completion modal */
+  .modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    width: 100%; max-width: 420px; overflow: hidden;
+  }
+  .modal-head {
+    padding: 14px 16px; border-bottom: 1px solid var(--line);
+    font-family: 'Barlow Condensed', sans-serif; font-size: 19px; font-weight: 600;
+  }
+  .modal-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .photo-upload-area {
+    border: 2px dashed var(--line); border-radius: 6px; padding: 20px;
+    text-align: center; cursor: pointer; transition: border-color 0.15s;
+  }
+  .photo-upload-area:hover, .photo-upload-area.has-file { border-color: var(--steel); }
+  .photo-upload-area input { display: none; }
+  .photo-upload-icon { font-size: 28px; margin-bottom: 6px; }
+  .photo-upload-text { font-size: 13px; color: var(--text-dim); }
+  .photo-upload-name { font-size: 13px; color: var(--steel); margin-top: 4px; font-weight: 500; }
+  .photo-preview { max-width: 100%; max-height: 180px; border-radius: 4px; margin-top: 8px; }
+  .modal-actions { display: flex; gap: 8px; }
+  .modal-actions button {
+    flex: 1; padding: 11px; border-radius: 5px; font-size: 14px; font-weight: 600;
+    cursor: pointer; font-family: 'Inter', sans-serif;
+  }
+  .modal-skip {
+    background: none; border: 1px solid var(--line); color: var(--text-dim);
+  }
+  .modal-confirm {
+    background: var(--green); border: none; color: #12181C;
+    font-family: 'Barlow Condensed', sans-serif; font-size: 15.5px; letter-spacing: 0.3px;
+  }
+  .modal-confirm:disabled { opacity: 0.5; cursor: wait; }
+  .photo-uploading { font-size: 12.5px; color: var(--amber); text-align: center; display: none; }
+
+  /* Photo thumbnail on completed entries */
+  .entry-photo { margin-top: 8px; }
+  .entry-photo img { max-width: 100%; max-height: 200px; border-radius: 5px; border: 1px solid var(--line); }
+  .entry-photo a { font-size: 12px; color: var(--steel); text-decoration: none; display: inline-block; margin-top: 4px; }
+
   #empty-state {
     text-align: center; color: var(--text-dim); padding: 50px 20px; font-size: 14px;
   }
@@ -366,6 +412,26 @@
   </div>
 
   <div class="sync-note">Entries are shared with your team and sync across everyone using this log.</div>
+</div>
+
+<div class="modal-overlay" id="complete-modal">
+  <div class="modal">
+    <div class="modal-head">Complete Job</div>
+    <div class="modal-body">
+      <div class="photo-upload-area" id="photo-area">
+        <input type="file" id="photo-input" accept="image/*" capture="environment">
+        <div class="photo-upload-icon">📷</div>
+        <div class="photo-upload-text">Tap to add a photo (optional)</div>
+        <div class="photo-upload-name" id="photo-name"></div>
+        <img class="photo-preview" id="photo-preview" style="display:none;">
+      </div>
+      <div class="photo-uploading" id="photo-uploading">Uploading photo…</div>
+      <div class="modal-actions">
+        <button class="modal-skip" id="modal-skip">Skip</button>
+        <button class="modal-confirm" id="modal-confirm">Complete</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -623,6 +689,11 @@ function render() {
           <span class="label">Manhours (${e.crew.length} ${e.crew.length === 1 ? 'person' : 'people'})</span>
           <span class="value">${e.manHours}</span>
         </div>` : ''}
+      ${e.completed && e.photoUrl ? `
+        <div class="entry-photo">
+          <img src="${e.photoUrl}" alt="Completion photo" loading="lazy">
+          <br><a href="${e.photoUrl}" target="_blank">View full size</a>
+        </div>` : ''}
       <div class="block-form" id="block-form-${e.id}">
         <div class="two-col">
           <div class="field">
@@ -696,24 +767,23 @@ function render() {
       const id = btn.dataset.id;
       const entry = entries.find(x => x.id === id);
       if (!entry) return;
-      entry.completed = !entry.completed;
 
+      // Reopening — no modal needed
       if (entry.completed) {
-        const last = entry.blocks[entry.blocks.length - 1];
-        if (last && !last.end) last.end = nowLocal();
-        const hours = totalBlocksMs(entry.blocks) / 3600000;
-        entry.manHours = Math.round(hours * entry.crew.length * 100) / 100;
+        entry.completed = false;
+        entry.photoUrl = entry.photoUrl || null;
+        render();
+        try {
+          await apiPost({
+            action: 'updateEntry', id,
+            updates: { completed: false, blocks: entry.blocks, manHours: entry.manHours }
+          });
+        } catch (e) { console.error('Update failed', e); }
+        return;
       }
 
-      render();
-      try {
-        await apiPost({
-          action: 'updateEntry', id,
-          updates: { completed: entry.completed, blocks: entry.blocks, manHours: entry.manHours }
-        });
-      } catch (e) {
-        console.error('Update failed', e);
-      }
+      // Completing — show modal
+      openCompleteModal(entry);
     };
   });
 }
@@ -788,6 +858,97 @@ document.getElementById('entry-form').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('start-time').value = nowLocal();
+
+/* ---------- Complete-with-photo modal ---------- */
+let pendingCompleteEntry = null;
+let pendingPhotoData = null;
+
+const modal = document.getElementById('complete-modal');
+const photoInput = document.getElementById('photo-input');
+const photoArea = document.getElementById('photo-area');
+const photoPreview = document.getElementById('photo-preview');
+const photoName = document.getElementById('photo-name');
+const photoUploading = document.getElementById('photo-uploading');
+const modalConfirm = document.getElementById('modal-confirm');
+
+function openCompleteModal(entry) {
+  pendingCompleteEntry = entry;
+  pendingPhotoData = null;
+  photoInput.value = '';
+  photoPreview.style.display = 'none';
+  photoName.textContent = '';
+  photoArea.classList.remove('has-file');
+  photoUploading.style.display = 'none';
+  modalConfirm.disabled = false;
+  modal.classList.add('open');
+}
+
+function closeModal() {
+  modal.classList.remove('open');
+  pendingCompleteEntry = null;
+  pendingPhotoData = null;
+}
+
+photoArea.addEventListener('click', () => photoInput.click());
+
+photoInput.addEventListener('change', () => {
+  const file = photoInput.files[0];
+  if (!file) return;
+  photoArea.classList.add('has-file');
+  photoName.textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    pendingPhotoData = ev.target.result; // data URL
+    photoPreview.src = pendingPhotoData;
+    photoPreview.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+});
+
+async function completeEntry(withPhoto) {
+  const entry = pendingCompleteEntry;
+  if (!entry) return;
+
+  const last = entry.blocks[entry.blocks.length - 1];
+  if (last && !last.end) last.end = nowLocal();
+  const hours = totalBlocksMs(entry.blocks) / 3600000;
+  entry.manHours = Math.round(hours * entry.crew.length * 100) / 100;
+  entry.completed = true;
+
+  let photoUrl = null;
+
+  if (withPhoto && pendingPhotoData) {
+    modalConfirm.disabled = true;
+    photoUploading.style.display = 'block';
+    try {
+      const res = await apiPost({
+        action: 'uploadPhoto',
+        entryId: entry.id,
+        fileName: photoInput.files[0]?.name || 'photo.jpg',
+        dataUrl: pendingPhotoData
+      });
+      if (res.success && res.url) photoUrl = res.url;
+    } catch (err) {
+      console.error('Photo upload failed', err);
+    }
+    photoUploading.style.display = 'none';
+  }
+
+  entry.photoUrl = photoUrl;
+  closeModal();
+  render();
+
+  try {
+    const updates = { completed: true, blocks: entry.blocks, manHours: entry.manHours };
+    if (photoUrl) updates.photoUrl = photoUrl;
+    await apiPost({ action: 'updateEntry', id: entry.id, updates });
+  } catch (e) { console.error('Update failed', e); }
+}
+
+document.getElementById('modal-skip').addEventListener('click', () => completeEntry(false));
+document.getElementById('modal-confirm').addEventListener('click', () => completeEntry(true));
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
 loadEntries();
 loadPendingTasks();
 setInterval(loadPendingTasks, 20000);
