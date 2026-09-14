@@ -745,12 +745,16 @@ document.getElementById('entry-form').addEventListener('submit', async (e) => {
   }
   if (!department || !description || !start) return;
 
+  const claimedTask = activePendingId ? pendingTasks.find(t => t.id === activePendingId) : null;
+
   const newEntry = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
     department, crew: [...crew], description,
     blocks: [{ start, end }],
     completed: false,
-    manHours: null
+    manHours: null,
+    requestedAt: claimedTask ? claimedTask.createdAt : null,
+    requestedBy: claimedTask ? claimedTask.requestedBy : null
   };
   entries.push(newEntry);
   render();
