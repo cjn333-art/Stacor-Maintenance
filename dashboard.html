@@ -52,11 +52,48 @@
   }
   .kpi {
     background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
-    padding: 14px 14px 12px;
+    padding: 14px 14px 12px; cursor: pointer; transition: border-color 0.15s;
   }
+  .kpi:hover, .kpi.active { border-color: var(--steel); }
+  .kpi.active { background: var(--steel-dim); }
   .kpi-label { font-size: 11.5px; color: var(--text-dim); font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px; }
   .kpi .num { font-size: 32px; font-weight: 700; margin-top: 4px; line-height: 1; }
-  .kpi .unit { font-size: 13px; color: var(--text-dim); margin-top: 2px; }
+  .kpi .tap-hint { font-size: 10.5px; color: var(--text-dim); margin-top: 4px; opacity: 0.6; }
+
+  /* Detail drawer */
+  #detail-drawer {
+    display: none; margin: 10px 16px 0; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; overflow: hidden;
+  }
+  #detail-drawer.open { display: block; }
+  .drawer-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 14px; border-bottom: 1px solid var(--line);
+  }
+  .drawer-title { font-family: 'Barlow Condensed', sans-serif; font-size: 17px; font-weight: 600; }
+  .drawer-close {
+    background: none; border: none; color: var(--text-dim); font-size: 20px;
+    cursor: pointer; padding: 0 4px; line-height: 1;
+  }
+  .drawer-close:hover { color: var(--text); }
+  .drawer-list { max-height: 400px; overflow-y: auto; }
+  .drawer-item {
+    padding: 10px 14px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;
+  }
+  .drawer-item:last-child { border-bottom: none; }
+  .di-main { flex: 1; min-width: 0; }
+  .di-desc { font-size: 14px; font-weight: 500; }
+  .di-meta { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .di-badge {
+    font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .di-badge.done { background: var(--green-dim); color: var(--green); }
+  .di-badge.open { background: var(--steel-dim); color: var(--steel); }
+  .di-badge.urgent { background: var(--red-dim); color: var(--red); }
+  .di-badge.pending { background: rgba(240,162,2,0.15); color: var(--amber); }
+  .drawer-empty { padding: 16px 14px; color: var(--text-dim); font-size: 13px; font-style: italic; }
 
   .section { margin: 18px 16px 0; }
   .section h2 { font-size: 18px; font-weight: 600; margin: 0 0 10px; }
@@ -89,16 +126,12 @@
   .response-time.mid { color: var(--amber); }
   .response-time.slow { color: var(--red); }
 
-  #loading {
-    text-align: center; padding: 60px 16px; color: var(--text-dim); font-size: 14px;
-  }
+  #loading { text-align: center; padding: 60px 16px; color: var(--text-dim); font-size: 14px; }
   #error-msg {
     display: none; margin: 12px 16px 0; background: var(--red-dim); border: 1px solid var(--red);
     color: var(--red); border-radius: 5px; padding: 10px 13px; font-size: 13.5px;
   }
   .empty-note { color: var(--text-dim); font-size: 13px; font-style: italic; padding: 8px 0; }
-
-  .pending-section { margin-top: 4px; }
   .pending-kpi .num { color: var(--amber); }
 </style>
 </head>
@@ -126,22 +159,34 @@
     </div>
 
     <div class="kpi-row">
-      <div class="kpi">
+      <div class="kpi" id="kpi-jobs-card" data-view="all">
         <div class="kpi-label">Total Jobs</div>
         <div class="num" id="kpi-jobs">—</div>
+        <div class="tap-hint">Tap to view</div>
       </div>
-      <div class="kpi">
+      <div class="kpi" id="kpi-completed-card" data-view="completed">
         <div class="kpi-label">Completed</div>
         <div class="num" id="kpi-completed">—</div>
+        <div class="tap-hint">Tap to view</div>
       </div>
-      <div class="kpi">
+      <div class="kpi" id="kpi-hours-card" data-view="hours">
         <div class="kpi-label">Total Man-Hours</div>
         <div class="num" id="kpi-hours">—</div>
+        <div class="tap-hint">Tap to view</div>
       </div>
-      <div class="kpi pending-kpi">
+      <div class="kpi pending-kpi" id="kpi-pending-card" data-view="pending">
         <div class="kpi-label">Pending Now</div>
         <div class="num" id="kpi-pending">—</div>
+        <div class="tap-hint">Tap to view</div>
       </div>
+    </div>
+
+    <div id="detail-drawer">
+      <div class="drawer-head">
+        <div class="drawer-title" id="drawer-title"></div>
+        <button class="drawer-close" id="drawer-close">&times;</button>
+      </div>
+      <div class="drawer-list" id="drawer-list"></div>
     </div>
 
     <div class="section">
@@ -172,6 +217,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbxrrd4RF22tOjw8GxH4sfoV
 
 let allEntries = [];
 let allPending = [];
+let activeView = null;
 
 async function apiGet(action) {
   const res = await fetch(`${API_URL}?action=${action}`);
@@ -210,33 +256,138 @@ function getFilteredEntries() {
   const period = document.getElementById('filter-period').value;
   const dept = document.getElementById('filter-dept').value;
   let entries = allEntries;
-
   if (period !== 'all') {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - parseInt(period));
     entries = entries.filter(e => {
       if (!e.blocks || !e.blocks.length) return false;
-      const first = new Date(e.blocks[0].start);
-      return first >= cutoff;
+      return new Date(e.blocks[0].start) >= cutoff;
     });
   }
-  if (dept !== 'all') {
-    entries = entries.filter(e => e.department === dept);
-  }
+  if (dept !== 'all') entries = entries.filter(e => e.department === dept);
   return entries;
 }
 
+function getFilteredPending() {
+  const dept = document.getElementById('filter-dept').value;
+  return dept === 'all' ? allPending : allPending.filter(p => p.department === dept);
+}
+
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) + ' ' +
+         d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit' });
+}
+
+function renderDrawer(title, items) {
+  document.getElementById('drawer-title').textContent = title;
+  const list = document.getElementById('drawer-list');
+  if (!items.length) {
+    list.innerHTML = '<div class="drawer-empty">No items to show.</div>';
+  } else {
+    list.innerHTML = items.map(i => i).join('');
+  }
+  document.getElementById('detail-drawer').classList.add('open');
+  document.getElementById('detail-drawer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeDrawer() {
+  document.getElementById('detail-drawer').classList.remove('open');
+  document.querySelectorAll('.kpi').forEach(k => k.classList.remove('active'));
+  activeView = null;
+}
+
+function showView(view) {
+  if (activeView === view) { closeDrawer(); return; }
+  activeView = view;
+  document.querySelectorAll('.kpi').forEach(k => k.classList.remove('active'));
+  document.querySelector(`[data-view="${view}"]`).classList.add('active');
+
+  const entries = getFilteredEntries();
+  const pending = getFilteredPending();
+
+  if (view === 'all') {
+    renderDrawer('All Jobs', entries.map(e => `
+      <div class="drawer-item">
+        <div class="di-main">
+          <div class="di-desc">${esc(e.description)}</div>
+          <div class="di-meta">${esc(e.department)} · ${(e.crew||[]).join(', ')} · ${fmtDate(e.blocks?.[0]?.start)}${e.manHours ? ' · ' + e.manHours + 'h' : ''}</div>
+        </div>
+        <div class="di-badge ${e.completed ? 'done' : 'open'}">${e.completed ? 'Done' : 'Open'}</div>
+      </div>
+    `));
+  } else if (view === 'completed') {
+    const done = entries.filter(e => e.completed);
+    renderDrawer('Completed Jobs', done.map(e => `
+      <div class="drawer-item">
+        <div class="di-main">
+          <div class="di-desc">${esc(e.description)}</div>
+          <div class="di-meta">${esc(e.department)} · ${(e.crew||[]).join(', ')} · ${fmtDate(e.blocks?.[0]?.start)}${e.manHours ? ' · ' + e.manHours + 'h' : ''}</div>
+        </div>
+        <div class="di-badge done">Done</div>
+      </div>
+    `));
+  } else if (view === 'hours') {
+    const withHours = entries.filter(e => e.manHours > 0).sort((a,b) => b.manHours - a.manHours);
+    renderDrawer('Jobs by Man-Hours', withHours.map(e => `
+      <div class="drawer-item">
+        <div class="di-main">
+          <div class="di-desc">${esc(e.description)}</div>
+          <div class="di-meta">${esc(e.department)} · ${(e.crew||[]).join(', ')} · ${fmtDate(e.blocks?.[0]?.start)}</div>
+        </div>
+        <div class="di-badge open">${e.manHours}h</div>
+      </div>
+    `));
+  } else if (view === 'pending') {
+    const sorted = pending.slice().sort((a,b) => {
+      if (a.urgent !== b.urgent) return a.urgent ? -1 : 1;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+    renderDrawer('Pending Tasks', sorted.map(t => `
+      <div class="drawer-item">
+        <div class="di-main">
+          <div class="di-desc">${esc(t.type)}${t.otherDetail ? ' — ' + esc(t.otherDetail) : ''}</div>
+          <div class="di-meta">${esc(t.department)} · ${esc(t.requestedBy||'Unknown')} · ${fmtDateTime(t.createdAt)}</div>
+          ${t.description ? '<div class="di-meta">' + esc(t.description) + '</div>' : ''}
+        </div>
+        <div class="di-badge ${t.urgent ? 'urgent' : 'pending'}">${t.urgent ? 'Urgent' : 'Waiting'}</div>
+      </div>
+    `));
+  }
+}
+
+function esc(s) {
+  if (!s) return '';
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// KPI click handlers
+document.querySelectorAll('.kpi[data-view]').forEach(card => {
+  card.addEventListener('click', () => showView(card.dataset.view));
+});
+document.getElementById('drawer-close').addEventListener('click', closeDrawer);
+
 function refresh() {
   const entries = getFilteredEntries();
-  const dept = document.getElementById('filter-dept').value;
+  const pending = getFilteredPending();
 
-  // KPIs
   document.getElementById('kpi-jobs').textContent = entries.length;
   document.getElementById('kpi-completed').textContent = entries.filter(e => e.completed).length;
   const totalHours = entries.reduce((s, e) => s + (e.manHours || 0), 0);
   document.getElementById('kpi-hours').textContent = totalHours > 0 ? totalHours.toFixed(1) : '0';
-  const filteredPending = dept === 'all' ? allPending : allPending.filter(p => p.department === dept);
-  document.getElementById('kpi-pending').textContent = filteredPending.length;
+  document.getElementById('kpi-pending').textContent = pending.length;
+
+  // Refresh drawer if open
+  if (activeView) showView(activeView);
 
   // Department bar chart
   const deptCounts = {};
@@ -283,7 +434,7 @@ function refresh() {
     const requested = new Date(e.requestedAt);
     const started = new Date(e.blocks[0].start);
     const diffHrs = (started - requested) / (1000 * 60 * 60);
-    if (diffHrs < 0 || diffHrs > 8760) return; // skip bad data (>1yr)
+    if (diffHrs < 0 || diffHrs > 8760) return;
     const d = e.department;
     responseTimes[d] = (responseTimes[d] || 0) + diffHrs;
     responseCounts[d] = (responseCounts[d] || 0) + 1;
@@ -291,16 +442,16 @@ function refresh() {
 
   const responseEl = document.getElementById('response-list');
   const responseEmpty = document.getElementById('response-empty');
-  const responseEntries = Object.entries(responseTimes).map(([d, total]) => ({
+  const responseData = Object.entries(responseTimes).map(([d, total]) => ({
     dept: d, avg: total / responseCounts[d]
   })).sort((a, b) => a.avg - b.avg);
 
-  if (!responseEntries.length) {
+  if (!responseData.length) {
     responseEl.innerHTML = '';
     responseEmpty.style.display = 'block';
   } else {
     responseEmpty.style.display = 'none';
-    responseEl.innerHTML = responseEntries.map(r => {
+    responseEl.innerHTML = responseData.map(r => {
       const cls = r.avg < 4 ? 'fast' : r.avg < 24 ? 'mid' : 'slow';
       return `<div class="response-row">
         <div class="response-dept">${r.dept}</div>
@@ -316,8 +467,8 @@ function fmtDuration(hours) {
   return (hours / 24).toFixed(1) + ' days';
 }
 
-document.getElementById('filter-period').addEventListener('change', refresh);
-document.getElementById('filter-dept').addEventListener('change', refresh);
+document.getElementById('filter-period').addEventListener('change', () => { closeDrawer(); refresh(); });
+document.getElementById('filter-dept').addEventListener('change', () => { closeDrawer(); refresh(); });
 
 loadData();
 </script>
